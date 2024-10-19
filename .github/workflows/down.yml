@@ -18,7 +18,7 @@ jobs:
     steps:
     - name: download
       run: |
-        mkdri -p $PWD/dw/
+        mkdir -p $PWD/dw/
         curl -o $PWD/dw/${{ github.event.inputs.filename }} ${{ github.event.inputs.filurl }}
 
     - name: Release set path
