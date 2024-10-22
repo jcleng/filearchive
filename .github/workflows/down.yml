@@ -10,6 +10,14 @@ on:
         description: '文件名称'
         required: true
         default: ''
+      option:
+        description: '选择类型'
+        required: true
+        default: 'curl'
+        type: choice
+        options:
+          - 'curl'
+          - 'wget'
 
 name: RUN
 jobs:
@@ -17,10 +25,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: download
+      if: ${{ github.event.inputs.option == 'curl' }}
       run: |
         sudo apt-get install coreutils -y
         mkdir -p $PWD/dw/
         curl -o $PWD/dw/${{ github.event.inputs.filename }} ${{ github.event.inputs.filurl }}
+    - name: download
+      if: ${{ github.event.inputs.option == 'wget' }}
+      run: |
+        mkdir -p $PWD/dw/
+        wget -O $PWD/dw/${{ github.event.inputs.filename }} ${{ github.event.inputs.filurl }}
 
     - name: Release set path
       run: |
