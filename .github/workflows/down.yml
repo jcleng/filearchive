@@ -13,9 +13,10 @@ on:
       option:
         description: '选择类型'
         required: true
-        default: 'curl'
+        default: 'aria2c'
         type: choice
         options:
+          - 'aria2c'
           - 'curl'
           - 'wget'
 
@@ -27,7 +28,7 @@ jobs:
     - name: download
       if: ${{ github.event.inputs.option == 'curl' }}
       run: |
-        sudo apt-get install coreutils -y
+        sudo apt-get install coreutils aria2 -y
         mkdir -p $PWD/dw/
         curl -o $PWD/dw/${{ github.event.inputs.filename }} ${{ github.event.inputs.filurl }}
     - name: download
@@ -35,7 +36,11 @@ jobs:
       run: |
         mkdir -p $PWD/dw/
         wget -O $PWD/dw/${{ github.event.inputs.filename }} ${{ github.event.inputs.filurl }}
-
+    - name: download
+      if: ${{ github.event.inputs.option == 'aria2c' }}
+      run: |
+        mkdir -p $PWD/dw/
+        aria2c -d $PWD/dw/ -o ${{ github.event.inputs.filename }} ${{ github.event.inputs.filurl }}
     - name: Release set path
       run: |
         touch release.txt
