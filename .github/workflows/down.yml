@@ -30,17 +30,17 @@ jobs:
       run: |
         sudo apt-get install coreutils aria2 -y
         mkdir -p $PWD/dw/
-        curl -o $PWD/dw/${{ github.event.inputs.filename }} ${{ github.event.inputs.filurl }}
+        curl -o $PWD/dw/${{ github.event.inputs.filename }} "${{ github.event.inputs.filurl }}"
     - name: download
       if: ${{ github.event.inputs.option == 'wget' }}
       run: |
         mkdir -p $PWD/dw/
-        wget -O $PWD/dw/${{ github.event.inputs.filename }} ${{ github.event.inputs.filurl }}
+        wget -O $PWD/dw/${{ github.event.inputs.filename }} "${{ github.event.inputs.filurl }}"
     - name: download
       if: ${{ github.event.inputs.option == 'aria2c' }}
       run: |
         mkdir -p $PWD/dw/
-        aria2c -d $PWD/dw/ -o ${{ github.event.inputs.filename }} ${{ github.event.inputs.filurl }}
+        aria2c -d $PWD/dw/ -o ${{ github.event.inputs.filename }} "${{ github.event.inputs.filurl }}"
     - name: Release set path
       run: |
         touch release.txt
