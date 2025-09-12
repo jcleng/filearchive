@@ -38,7 +38,7 @@ jobs:
         run: |
           rm -rf ./*
           wget https://maven.minecraftforge.net/net/minecraftforge/forge/${{ inputs.forge-version }}/forge-${{ inputs.forge-version }}-installer.jar
-          java -jar ${{ inputs.forge-version }}.jar --installServer
+          java -jar forge-${{ inputs.forge-version }}-installer.jar --installServer
 
       - name: Zip server files
         run: |
