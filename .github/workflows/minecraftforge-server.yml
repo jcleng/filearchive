@@ -6,12 +6,7 @@ on:
       java-version:
         description: 'Java version to use'
         required: true
-        default: '17'
-        type: choice
-        options:
-          - '8'
-          - '11'
-          - '17'
+        default: '17-internal'
       forge-version:
         description: 'Forge server jar filename'
         required: true
@@ -45,6 +40,7 @@ jobs:
           zip -r minecraft-server-${{ inputs.forge-version }}.zip . -x *.git*
           touch release.txt
           echo "${{ inputs.forge-version }}">>release.txt
+          echo "${{ inputs.java-version }}">>release.txt
           echo "https://maven.minecraftforge.net/net/minecraftforge/forge/${{ inputs.forge-version }}/forge-${{ inputs.forge-version }}-installer.jar">>release.txt
           sha256sum minecraft-server-${{ inputs.forge-version }}.zip>>release.txt
           ls -lah minecraft-server-${{ inputs.forge-version }}.zip>>release.txt
