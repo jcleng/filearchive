@@ -42,12 +42,12 @@ jobs:
 
       - name: Zip server files
         run: |
-          zip -r minecraft-server.zip . -x *.git*
+          zip -r minecraft-server-${{ inputs.forge-version }}.zip . -x *.git*
           touch release.txt
           echo "${{ inputs.forge-version }}">>release.txt
           echo "https://maven.minecraftforge.net/net/minecraftforge/forge/${{ inputs.forge-version }}/forge-${{ inputs.forge-version }}-installer.jar">>release.txt
-          sha256sum minecraft-server.zip>>release.txt
-          ls -lah minecraft-server.zip>>release.txt
+          sha256sum minecraft-server-${{ inputs.forge-version }}.zip>>release.txt
+          ls -lah minecraft-server-${{ inputs.forge-version }}.zip>>release.txt
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -55,6 +55,6 @@ jobs:
           tag_name: ${{ inputs.forge-version }}
           body_path: release.txt
           files: |
-            minecraft-server.zip
+            minecraft-server-${{ inputs.forge-version }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
