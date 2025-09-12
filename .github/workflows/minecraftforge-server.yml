@@ -6,7 +6,7 @@ on:
       java-version:
         description: 'Java version to use'
         required: true
-        default: '17-internal'
+        default: '17'
       forge-version:
         description: 'Forge server jar filename'
         required: true
