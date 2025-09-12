@@ -26,8 +26,8 @@ jobs:
           java-version: ${{ inputs.java-version }}
           distribution: 'temurin'
 
-    #   - name: Accept EULA
-    #     run: echo "eula=true" > eula.txt
+      - name: Accept EULA
+        run: echo "eula=true" > eula.txt
 
       - name: Run Forge Server
         run: |
