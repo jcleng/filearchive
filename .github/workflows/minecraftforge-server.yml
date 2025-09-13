@@ -52,5 +52,6 @@ jobs:
           body_path: release.txt
           files: |
             minecraft-server-${{ inputs.forge-version }}.zip
+            forge-${{ inputs.forge-version }}-installer.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
