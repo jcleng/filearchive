@@ -1,4 +1,4 @@
-name: Minecraft Forge Server Archive(installServer)
+name: Dot minecraft dir archive(installClient)
 
 on:
   workflow_dispatch:
@@ -26,24 +26,22 @@ jobs:
           java-version: ${{ inputs.java-version }}
           distribution: 'temurin'
 
-      - name: Accept EULA
-        run: echo "eula=true" > eula.txt
-
-      - name: Run Forge Server
+      - name: Run Forge Client
         run: |
           rm -rf ./*
+          echo '{"selectedProfile": "(Default)","profiles": {"(Default)": {"name": "(Default)"}},"clientToken": "88888888-8888-8888-8888-888888888888"}'>launcher_profiles.json
           wget https://maven.minecraftforge.net/net/minecraftforge/forge/${{ inputs.forge-version }}/forge-${{ inputs.forge-version }}-installer.jar
-          java -jar forge-${{ inputs.forge-version }}-installer.jar --installServer
+          java -jar forge-${{ inputs.forge-version }}-installer.jar --installClient
 
-      - name: Zip server files
+      - name: Zip client files
         run: |
-          zip -r minecraft-server-${{ inputs.forge-version }}.zip . -x *.git*
+          zip -r minecraft-client-${{ inputs.forge-version }}.zip . -x *.git*
           touch release.txt
           echo "${{ inputs.forge-version }}">>release.txt
           echo "${{ inputs.java-version }}">>release.txt
           echo "https://maven.minecraftforge.net/net/minecraftforge/forge/${{ inputs.forge-version }}/forge-${{ inputs.forge-version }}-installer.jar">>release.txt
-          sha256sum minecraft-server-${{ inputs.forge-version }}.zip>>release.txt
-          ls -lah minecraft-server-${{ inputs.forge-version }}.zip>>release.txt
+          sha256sum minecraft-client-${{ inputs.forge-version }}.zip>>release.txt
+          ls -lah minecraft-client-${{ inputs.forge-version }}.zip>>release.txt
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -51,6 +49,6 @@ jobs:
           tag_name: ${{ inputs.forge-version }}
           body_path: release.txt
           files: |
-            minecraft-server-${{ inputs.forge-version }}.zip
+            minecraft-client-${{ inputs.forge-version }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
