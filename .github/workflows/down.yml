@@ -46,6 +46,7 @@ jobs:
     - name: Release set path
       run: |
         touch release.txt
+        echo "${{ github.event.inputs.option }}">>release.txt
         echo "${{ github.event.inputs.filurl }}">>release.txt
         sha256sum $PWD/dw/*>>release.txt
         ls -la $PWD/dw/*>>release.txt
