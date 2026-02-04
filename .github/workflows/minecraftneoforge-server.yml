@@ -1,0 +1,57 @@
+name: Minecraft Neoforge Server Archive(installServer)
+
+on:
+  workflow_dispatch:
+    inputs:
+      java-version:
+        description: 'Java version to use'
+        required: true
+        default: '17'
+      forge-version:
+        description: 'NeoForge version'
+        required: true
+        default: '20.4.251'
+
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ inputs.java-version }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ inputs.java-version }}
+          distribution: 'temurin'
+
+      - name: Accept EULA
+        run: echo "eula=true" > eula.txt
+
+      - name: Run Forge Server
+        run: |
+          rm -rf ./*
+          wget https://maven.neoforged.net/releases/net/neoforged/neoforge/${{ inputs.forge-version }}/neoforge-${{ inputs.forge-version }}-installer.jar
+          java -jar neoforge-${{ inputs.forge-version }}-installer.jar --installServer
+
+      - name: Zip server files
+        run: |
+          zip -r minecraft-server-${{ inputs.forge-version }}.zip . -x *.git*
+          touch release.txt
+          echo "${{ inputs.forge-version }}">>release.txt
+          echo "${{ inputs.java-version }}">>release.txt
+          echo "https://maven.neoforged.net/releases/net/neoforged/neoforge/${{ inputs.forge-version }}/neoforge-${{ inputs.forge-version }}-installer.jar">>release.txt
+          sha256sum minecraft-server-${{ inputs.forge-version }}.zip>>release.txt
+          ls -lah minecraft-server-${{ inputs.forge-version }}.zip>>release.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ inputs.forge-version }}
+          body_path: release.txt
+          files: |
+            minecraft-server-${{ inputs.forge-version }}.zip
+            forge-${{ inputs.forge-version }}-installer.jar
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
