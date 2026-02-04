@@ -39,6 +39,7 @@ jobs:
         run: |
           zip -r minecraft-server-${{ inputs.forge-version }}.zip . -x *.git*
           touch release.txt
+          echo "Neoforge">>release.txt
           echo "${{ inputs.forge-version }}">>release.txt
           echo "${{ inputs.java-version }}">>release.txt
           echo "https://maven.neoforged.net/releases/net/neoforged/neoforge/${{ inputs.forge-version }}/neoforge-${{ inputs.forge-version }}-installer.jar">>release.txt
@@ -52,6 +53,6 @@ jobs:
           body_path: release.txt
           files: |
             minecraft-server-${{ inputs.forge-version }}.zip
-            forge-${{ inputs.forge-version }}-installer.jar
+            neoforge-${{ inputs.forge-version }}-installer.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
