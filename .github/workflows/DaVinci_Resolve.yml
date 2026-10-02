@@ -43,12 +43,30 @@ jobs:
         curl -sL --max-time 1800 -o "${ARCHIVE}" "${SIGNED_URL}"
         echo "==> 下载完成: $(ls -lh "${ARCHIVE}" | awk '{print $5}')"
 
+    - name: Split if larger than 2GB
+      run: |
+        cd $PWD/dw/
+        ARCHIVE="DaVinci_Resolve_${{ github.event.inputs.PKGVER }}_Linux.zip"
+        SIZE=$(stat -c %s "${ARCHIVE}")
+        # 2GB 阈值 (2147483648 bytes)
+        if [ "${SIZE}" -gt 2147483648 ]; then
+          echo "==> 文件大于 2GB ($((SIZE/1024/1024/1024))GB)，拆分为 1.5GB 分片..."
+          split -b 1610612736 -d -a 2 "${ARCHIVE}" "${ARCHIVE}.part"
+          rm -f "${ARCHIVE}"
+          echo "==> 拆分完成:"
+          ls -lh "${ARCHIVE}".part*
+        else
+          echo "==> 文件未超过 2GB，直接上传原文件。"
+        fi
+
     - name: Release set path
       run: |
         touch release.txt
         echo "DaVinci_Resolve_${{ github.event.inputs.PKGVER }}_Linux.zip">>release.txt
-        sha256sum $PWD/dw/*>>release.txt
+        echo "==> 文件列表:">>release.txt
         ls -la $PWD/dw/*>>release.txt
+        echo "==> SHA256:">>release.txt
+        sha256sum $PWD/dw/*>>release.txt
         echo "RELEASE_PATH=$PWD/dw/" >> $GITHUB_ENV
         echo "FILE_DATE=$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
