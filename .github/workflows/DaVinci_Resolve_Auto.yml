@@ -39,14 +39,15 @@ jobs:
 
         echo "==> 根据版本号 ${PKGVER} / ${EDITION} 解析 downloadId..."
         DLID=$(jq -r --arg v "${PKGVER}" --arg p "${EDITION}" '
-          .downloads[].urls.Linux[]
+          .downloads[]
+          | (.urls.Linux // [])[]
           | select(.product == $p and (.downloadTitle | test("DaVinci Resolve" + (if $p == "davinci-resolve-studio" then " Studio" else "" end) + " " + $v + "$")))
           | .downloadId
         ' downloads.json | head -n1)
 
         if [ -z "${DLID}" ]; then
           echo "!! 未找到匹配 ${PKGVER} / ${EDITION} 的 downloadId，可用版本如下："
-          jq -r '.downloads[].urls.Linux[] | select(.product == "'"${EDITION}"'") | .downloadTitle' downloads.json
+          jq -r '.downloads[] | (.urls.Linux // [])[] | select(.product == "'"${EDITION}"'") | .downloadTitle' downloads.json
           exit 1
         fi
         echo "==> 匹配到 downloadId: ${DLID}"
