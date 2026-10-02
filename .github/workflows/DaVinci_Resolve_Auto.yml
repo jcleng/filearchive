@@ -1,0 +1,105 @@
+on:
+  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      PKGVER:
+        description: 'DaVinci Resolve 版本号 (如 19.1.4 / 21.1.1)'
+        required: true
+        default: '19.1.4'
+      EDITION:
+        description: '版本类型'
+        required: true
+        default: 'davinci-resolve'
+        type: choice
+        options:
+          - 'davinci-resolve'
+          - 'davinci-resolve-studio'
+
+name: DaVinci Resolve (Auto)
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Resolve downloadId & Download
+      env:
+        PKGVER: ${{ github.event.inputs.PKGVER }}
+        EDITION: ${{ github.event.inputs.EDITION }}
+      run: |
+        sudo apt-get install coreutils jq -y
+        mkdir -p $PWD/dw/
+        cd $PWD/dw/
+
+        REFER_ID="77ef91f67a9e411bbbe299e595b4cfcc"
+        echo "==> 获取 Blackmagic 下载列表..."
+        curl -sL --max-time 60 \
+          -H "Accept: application/json, text/plain, */*" \
+          -H "Referer: https://www.blackmagicdesign.com/support/download/${REFER_ID}/Linux" \
+          -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.75 Safari/537.36" \
+          "https://www.blackmagicdesign.com/api/support/en/downloads.json" -o downloads.json
+
+        echo "==> 根据版本号 ${PKGVER} / ${EDITION} 解析 downloadId..."
+        DLID=$(jq -r --arg v "${PKGVER}" --arg p "${EDITION}" '
+          .downloads[].urls.Linux[]
+          | select(.product == $p and (.downloadTitle | test("DaVinci Resolve" + (if $p == "davinci-resolve-studio" then " Studio" else "" end) + " " + $v + "$")))
+          | .downloadId
+        ' downloads.json | head -n1)
+
+        if [ -z "${DLID}" ]; then
+          echo "!! 未找到匹配 ${PKGVER} / ${EDITION} 的 downloadId，可用版本如下："
+          jq -r '.downloads[].urls.Linux[] | select(.product == "'"${EDITION}"'") | .downloadTitle' downloads.json
+          exit 1
+        fi
+        echo "==> 匹配到 downloadId: ${DLID}"
+
+        ARCHIVE="DaVinci_Resolve_${PKGVER}_Linux.zip"
+        echo "==> 获取 DaVinci Resolve ${PKGVER} 下载地址..."
+        SIGNED_URL=$(curl -sL --max-time 60 \
+          -X POST \
+          -H "Host: www.blackmagicdesign.com" \
+          -H "Accept: application/json, text/plain, */*" \
+          -H "Origin: https://www.blackmagicdesign.com" \
+          -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.75 Safari/537.36" \
+          -H "Content-Type: application/json;charset=UTF-8" \
+          -H "Referer: https://www.blackmagicdesign.com/support/download/${REFER_ID}/Linux" \
+          -d '{"firstname":"Arch","lastname":"Linux","email":"someone@archlinux.org","phone":"202-555-0194","country":"us","street":"Bowery 146","state":"New York","city":"AUR","product":"DaVinci Resolve"}' \
+          "https://www.blackmagicdesign.com/api/register/us/download/${DLID}")
+
+        echo "==> 下载 ${ARCHIVE} ..."
+        curl -sL --max-time 1800 -o "${ARCHIVE}" "${SIGNED_URL}"
+        echo "==> 下载完成: $(ls -lh "${ARCHIVE}" | awk '{print $5}')"
+
+    - name: Split if larger than 2GB
+      run: |
+        cd $PWD/dw/
+        ARCHIVE="DaVinci_Resolve_${{ github.event.inputs.PKGVER }}_Linux.zip"
+        SIZE=$(stat -c %s "${ARCHIVE}")
+        # 2GB 阈值 (2147483648 bytes)
+        if [ "${SIZE}" -gt 2147483648 ]; then
+          echo "==> 文件大于 2GB ($((SIZE/1024/1024/1024))GB)，拆分为 1.5GB 分片..."
+          split -b 1610612736 -d -a 2 "${ARCHIVE}" "${ARCHIVE}.part"
+          rm -f "${ARCHIVE}"
+          echo "==> 拆分完成:"
+          ls -lh "${ARCHIVE}".part*
+        else
+          echo "==> 文件未超过 2GB，直接上传原文件。"
+        fi
+
+    - name: Release set path
+      run: |
+        touch release.txt
+        echo "DaVinci_Resolve_${{ github.event.inputs.PKGVER }}_Linux.zip (${{ github.event.inputs.EDITION }})">>release.txt
+        echo "==> 文件列表:">>release.txt
+        ls -la $PWD/dw/*>>release.txt
+        echo "==> SHA256:">>release.txt
+        sha256sum $PWD/dw/*>>release.txt
+        echo "RELEASE_PATH=$PWD/dw/" >> $GITHUB_ENV
+        echo "FILE_DATE=$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ env.FILE_DATE }}_DaVinci_Resolve_${{ github.event.inputs.PKGVER }}_${{ github.event.inputs.EDITION }}
+        body_path: release.txt
+        files: ${{ env.RELEASE_PATH }}/*
