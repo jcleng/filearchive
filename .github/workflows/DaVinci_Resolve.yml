@@ -1,0 +1,62 @@
+on:
+  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      PKGVER:
+        description: 'DaVinci Resolve 版本号'
+        required: true
+        default: '19.1.4'
+      RESOLVE_DLID:
+        description: '下载 DLID'
+        required: true
+        default: 'ee1da4f13df74d72b6da783ead2ed875'
+
+name: DaVinci Resolve
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download DaVinci Resolve
+      env:
+        PKGVER: ${{ github.event.inputs.PKGVER }}
+        RESOLVE_DLID: ${{ github.event.inputs.RESOLVE_DLID }}
+      run: |
+        sudo apt-get install coreutils -y
+        mkdir -p $PWD/dw/
+        cd $PWD/dw/
+
+        DLID="${RESOLVE_DLID:-ee1da4f13df74d72b6da783ead2ed875}"
+        ARCHIVE="DaVinci_Resolve_${PKGVER}_Linux.zip"
+        echo "==> 获取 DaVinci Resolve ${PKGVER} 下载地址..."
+        SIGNED_URL=$(curl -sL --max-time 60 \
+          -X POST \
+          -H "Host: www.blackmagicdesign.com" \
+          -H "Accept: application/json, text/plain, */*" \
+          -H "Origin: https://www.blackmagicdesign.com" \
+          -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.75 Safari/537.36" \
+          -H "Content-Type: application/json;charset=UTF-8" \
+          -H "Referer: https://www.blackmagicdesign.com/support/download/77ef91f67a9e411bbbe299e595b4cfcc/Linux" \
+          -d '{"firstname":"Arch","lastname":"Linux","email":"someone@archlinux.org","phone":"202-555-0194","country":"us","street":"Bowery 146","state":"New York","city":"AUR","product":"DaVinci Resolve"}' \
+          "https://www.blackmagicdesign.com/api/register/us/download/${DLID}")
+
+        echo "==> 下载 ${ARCHIVE} ..."
+        curl -sL --max-time 1800 -o "${ARCHIVE}" "${SIGNED_URL}"
+        echo "==> 下载完成: $(ls -lh "${ARCHIVE}" | awk '{print $5}')"
+
+    - name: Release set path
+      run: |
+        touch release.txt
+        echo "DaVinci_Resolve_${{ github.event.inputs.PKGVER }}_Linux.zip">>release.txt
+        sha256sum $PWD/dw/*>>release.txt
+        ls -la $PWD/dw/*>>release.txt
+        echo "RELEASE_PATH=$PWD/dw/" >> $GITHUB_ENV
+        echo "FILE_DATE=$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ env.FILE_DATE }}_DaVinci_Resolve_${{ github.event.inputs.PKGVER }}_Linux
+        body_path: release.txt
+        files: ${{ env.RELEASE_PATH }}/*
