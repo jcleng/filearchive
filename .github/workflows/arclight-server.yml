@@ -8,7 +8,7 @@ on:
         required: true
         default: '21'
       arclight-version:
-        description: 'Arclight release tag (GitHub release tag)'
+        description: 'Arclight release tag (GitHub release tag, "/" will be escaped)'
         required: true
         default: 'FeudalKings/1.0.1'
       arclight-jar:
@@ -26,6 +26,7 @@ permissions:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -39,7 +40,7 @@ jobs:
       - name: Download Arclight
         run: |
           rm -rf ./*
-          # 让依赖(libraries/.minecraft 等)落在工作目录内, 便于后续一起打包
+          # 让依赖(libraries/.arclight 等)落在工作目录内, 便于后续一起打包
           echo "HOME=$PWD" >> $GITHUB_ENV
           TAG_ENC="${ARCLIGHT_TAG//\//%2F}"
           wget "https://github.com/IzzelAliz/Arclight/releases/download/${TAG_ENC}/${ARCLIGHT_JAR}"
@@ -50,44 +51,86 @@ jobs:
 
       - name: Run Arclight Server and download dependencies
         run: |
-          for attempt in 1 2 3 4 5; do
-            echo "::group::Attempt ${attempt}: start server and download dependencies"
-            java -Xmx6G -Xms4G -jar "${ARCLIGHT_JAR}" nogui > server.log 2>&1 &
-            PID=$!
-            for i in $(seq 1 180); do
-              if grep -q "You need to agree to the EULA" server.log; then
-                echo "::endgroup::"
-                echo ">>> EULA 提示已出现, 依赖下载完成"
-                break
-              fi
-              if ! kill -0 "$PID" 2>/dev/null; then
-                echo "::endgroup::"
-                echo ">>> 服务器进程已退出"
-                break
-              fi
+          set -uo pipefail
+          EULA_RE="You need to agree to the EULA"
+
+          # 轮询日志直到出现 EULA 提示 / 进程退出 / 超时
+          # 返回 0=已到EULA, 1=进程退出, 2=超时
+          wait_for_eula() {
+            local log="$1" pid="$2" max=$3 i
+            for ((i = 0; i < max; i++)); do
+              if grep -q "$EULA_RE" "$log" 2>/dev/null; then return 0; fi
+              if ! kill -0 "$pid" 2>/dev/null; then return 1; fi
               sleep 5
             done
+            return 2
+          }
+
+          for attempt in 1 2 3; do
+            echo "::group::Attempt ${attempt}: 运行 Arclight 下载依赖"
+            rm -f arclight-install.log forge-launch.log
+
+            # 阶段1: 用 arclight jar 启动, 它会下载 forge/fabric 依赖并生成 unix_args.txt
+            java -Xmx6G -Xms4G -jar "${ARCLIGHT_JAR}" nogui > arclight-install.log 2>&1 &
+            PID=$!
+            wait_for_eula arclight-install.log "$PID" 720
+            RC=$?
             kill "$PID" 2>/dev/null || true
             wait "$PID" 2>/dev/null || true
-            if grep -q "You need to agree to the EULA" server.log; then
+
+            if [ "$RC" -eq 0 ]; then
+              echo "::endgroup::"
+              echo ">>> 阶段1: 已检测到 EULA 提示"
               break
             fi
-            echo "未检测到 EULA 提示, 等待 10 秒后重试..."
-            sleep 10
+
+            echo "::endgroup::"
+            echo ">>> 阶段1 未检测到 EULA (rc=${RC}), 检查依赖与启动参数..."
+
+            # 阶段2: 部分 Arclight 版本会在 mixin 注入阶段崩溃(上游 issue #1927),
+            #        此时依赖其实已经装好, 改用 Arclight 生成的 unix_args.txt 走 Forge 启动路径
+            ARGS_FILE="$(find libraries -name 'unix_args.txt' 2>/dev/null | head -1)"
+            if [ -n "${ARGS_FILE}" ] && [ -f user_jvm_args.txt ]; then
+              echo ">>> 使用生成的启动参数: ${ARGS_FILE}"
+              java @user_jvm_args.txt @"${ARGS_FILE}" nogui > forge-launch.log 2>&1 &
+              PID=$!
+              wait_for_eula forge-launch.log "$PID" 360
+              RC2=$?
+              kill "$PID" 2>/dev/null || true
+              wait "$PID" 2>/dev/null || true
+              if [ "$RC2" -eq 0 ]; then
+                echo ">>> 阶段2: 已检测到 EULA 提示, 依赖下载完成"
+                break
+              fi
+              echo ">>> 阶段2 未检测到 EULA (rc=${RC2})"
+            else
+              echo ">>> 未找到 unix_args.txt / user_jvm_args.txt, 依赖可能未安装完整"
+            fi
+
+            echo ">>> 等待 15 秒后重试..."
+            sleep 15
           done
-          tail -n 60 server.log || true
-          if ! grep -q "You need to agree to the EULA" server.log; then
-            echo "::warning::未检测到 EULA 提示, 请检查 server.log"
+
+          echo "===== arclight-install.log (末尾 40 行) ====="
+          tail -n 40 arclight-install.log 2>/dev/null || true
+          echo "===== forge-launch.log (末尾 40 行) ====="
+          tail -n 40 forge-launch.log 2>/dev/null || true
+
+          if grep -q "$EULA_RE" arclight-install.log forge-launch.log 2>/dev/null; then
+            echo ">>> 成功: 检测到 EULA 提示"
+          else
+            echo "::warning::未检测到 EULA 提示, 请检查上面的日志"
           fi
         env:
           ARCLIGHT_JAR: ${{ inputs.arclight-jar }}
 
       - name: Zip server files
         run: |
-          zip -r "minecraft-server-${TAG_NAME}.zip" . -x "*.git*" "server.log"
+          zip -r "minecraft-server-${TAG_NAME}.zip" . -x "*.git*" "arclight-install.log" "forge-launch.log"
           touch release.txt
           echo "Arclight">>release.txt
           echo "${ARCLIGHT_TAG}">>release.txt
+          echo "${ARCLIGHT_JAR}">>release.txt
           echo "${ARCLIGHT_JAVA}">>release.txt
           echo "${ARCLIGHT_URL}">>release.txt
           sha256sum "minecraft-server-${TAG_NAME}.zip">>release.txt
@@ -95,8 +138,8 @@ jobs:
         env:
           TAG_NAME: ${{ inputs.tag_name }}
           ARCLIGHT_TAG: ${{ inputs.arclight-version }}
-          ARCLIGHT_JAVA: ${{ inputs.java-version }}
           ARCLIGHT_JAR: ${{ inputs.arclight-jar }}
+          ARCLIGHT_JAVA: ${{ inputs.java-version }}
           ARCLIGHT_URL: https://github.com/IzzelAliz/Arclight/releases/download/${{ inputs.arclight-version }}/${{ inputs.arclight-jar }}
 
       - name: Create Release
