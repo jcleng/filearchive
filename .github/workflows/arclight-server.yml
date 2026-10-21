@@ -73,8 +73,8 @@ jobs:
             # 阶段1: 用 arclight jar 启动, 它会下载 forge/fabric 依赖并生成 unix_args.txt
             java -Xmx6G -Xms4G -jar "${ARCLIGHT_JAR}" nogui > arclight-install.log 2>&1 &
             PID=$!
-            wait_for_eula arclight-install.log "$PID" 720
-            RC=$?
+            RC=0
+            wait_for_eula arclight-install.log "$PID" 720 || RC=$?
             kill "$PID" 2>/dev/null || true
             wait "$PID" 2>/dev/null || true
 
@@ -94,8 +94,8 @@ jobs:
               echo ">>> 使用生成的启动参数: ${ARGS_FILE}"
               java @user_jvm_args.txt @"${ARGS_FILE}" nogui > forge-launch.log 2>&1 &
               PID=$!
-              wait_for_eula forge-launch.log "$PID" 360
-              RC2=$?
+              RC2=0
+              wait_for_eula forge-launch.log "$PID" 360 || RC2=$?
               kill "$PID" 2>/dev/null || true
               wait "$PID" 2>/dev/null || true
               if [ "$RC2" -eq 0 ]; then
@@ -115,6 +115,9 @@ jobs:
           tail -n 40 arclight-install.log 2>/dev/null || true
           echo "===== forge-launch.log (末尾 40 行) ====="
           tail -n 40 forge-launch.log 2>/dev/null || true
+          echo "===== 依赖统计 ====="
+          du -sh libraries 2>/dev/null || true
+          find . -name "*.jar" -not -path "./.git/*" 2>/dev/null | wc -l
 
           if grep -q "$EULA_RE" arclight-install.log forge-launch.log 2>/dev/null; then
             echo ">>> 成功: 检测到 EULA 提示"
