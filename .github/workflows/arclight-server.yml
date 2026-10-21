@@ -1,0 +1,111 @@
+name: Minecraft Arclight Server Archive(installServer)
+
+on:
+  workflow_dispatch:
+    inputs:
+      java-version:
+        description: 'Java version to use'
+        required: true
+        default: '21'
+      arclight-version:
+        description: 'Arclight release tag (GitHub release tag)'
+        required: true
+        default: 'FeudalKings/1.0.1'
+      arclight-jar:
+        description: 'Arclight server jar filename'
+        required: true
+        default: 'arclight-forge-1.21.1-1.0.1-8ec9529.jar'
+      tag_name:
+        description: 'Release tag name'
+        required: true
+        default: 'arclight-forge-1.21.1-1.0.1'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ inputs.java-version }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ inputs.java-version }}
+          distribution: 'temurin'
+
+      - name: Download Arclight
+        run: |
+          rm -rf ./*
+          # 让依赖(libraries/.minecraft 等)落在工作目录内, 便于后续一起打包
+          echo "HOME=$PWD" >> $GITHUB_ENV
+          TAG_ENC="${ARCLIGHT_TAG//\//%2F}"
+          wget "https://github.com/IzzelAliz/Arclight/releases/download/${TAG_ENC}/${ARCLIGHT_JAR}"
+          ls -lah "${ARCLIGHT_JAR}"
+        env:
+          ARCLIGHT_TAG: ${{ inputs.arclight-version }}
+          ARCLIGHT_JAR: ${{ inputs.arclight-jar }}
+
+      - name: Run Arclight Server and download dependencies
+        run: |
+          for attempt in 1 2 3 4 5; do
+            echo "::group::Attempt ${attempt}: start server and download dependencies"
+            java -Xmx6G -Xms4G -jar "${ARCLIGHT_JAR}" nogui > server.log 2>&1 &
+            PID=$!
+            for i in $(seq 1 180); do
+              if grep -q "You need to agree to the EULA" server.log; then
+                echo "::endgroup::"
+                echo ">>> EULA 提示已出现, 依赖下载完成"
+                break
+              fi
+              if ! kill -0 "$PID" 2>/dev/null; then
+                echo "::endgroup::"
+                echo ">>> 服务器进程已退出"
+                break
+              fi
+              sleep 5
+            done
+            kill "$PID" 2>/dev/null || true
+            wait "$PID" 2>/dev/null || true
+            if grep -q "You need to agree to the EULA" server.log; then
+              break
+            fi
+            echo "未检测到 EULA 提示, 等待 10 秒后重试..."
+            sleep 10
+          done
+          tail -n 60 server.log || true
+          if ! grep -q "You need to agree to the EULA" server.log; then
+            echo "::warning::未检测到 EULA 提示, 请检查 server.log"
+          fi
+        env:
+          ARCLIGHT_JAR: ${{ inputs.arclight-jar }}
+
+      - name: Zip server files
+        run: |
+          zip -r "minecraft-server-${TAG_NAME}.zip" . -x "*.git*" "server.log"
+          touch release.txt
+          echo "Arclight">>release.txt
+          echo "${ARCLIGHT_TAG}">>release.txt
+          echo "${ARCLIGHT_JAVA}">>release.txt
+          echo "${ARCLIGHT_URL}">>release.txt
+          sha256sum "minecraft-server-${TAG_NAME}.zip">>release.txt
+          ls -lah "minecraft-server-${TAG_NAME}.zip">>release.txt
+        env:
+          TAG_NAME: ${{ inputs.tag_name }}
+          ARCLIGHT_TAG: ${{ inputs.arclight-version }}
+          ARCLIGHT_JAVA: ${{ inputs.java-version }}
+          ARCLIGHT_JAR: ${{ inputs.arclight-jar }}
+          ARCLIGHT_URL: https://github.com/IzzelAliz/Arclight/releases/download/${{ inputs.arclight-version }}/${{ inputs.arclight-jar }}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ inputs.tag_name }}
+          body_path: release.txt
+          files: |
+            minecraft-server-${{ inputs.tag_name }}.zip
+            ${{ inputs.arclight-jar }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
